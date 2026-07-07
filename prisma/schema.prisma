@@ -1,0 +1,225 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum JobType {
+  INTERNSHIP
+  FULL_TIME
+  FREELANCE
+  CONTRACT
+  OTHER
+}
+
+enum StageType {
+  WATCHING
+  PREPARED
+  APPLIED
+  HR_SCREENING
+  INTERVIEW_1
+  INTERVIEW_2
+  REVIEW
+  OFFER
+  REJECTED
+}
+
+enum SourcePlatform {
+  LINKEDIN
+  INDEED
+  UPWORK
+  REFERRAL
+  COMPANY_WEBSITE
+  OTHER
+}
+
+enum ReminderType {
+  FOLLOW_UP
+  INTERVIEW
+  DEADLINE
+  OTHER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  
+  accounts      Account[]
+  sessions      Session[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  applications  JobApplication[]
+  resumes       Resume[]
+  analyticsSnapshots AnalyticsSnapshot[]
+}
+
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model JobApplication {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  companyName     String
+  companyLogo     String?       @db.LongText
+  companyWebsite    String?       @db.Text
+  companyIndustry   String?       @db.VarChar(191)
+  companyDescription String?       @db.Text
+  companyFounded     String?       @db.VarChar(50)
+  roleTitle       String
+  jobType         JobType
+  location        String?
+  jobUrl          String?       @db.Text
+
+  sourcePlatform  SourcePlatform
+
+  currentStage    StageType     @default(WATCHING)
+
+  cardColor       String?       @db.VarChar(50)
+
+  // Salary Tracker
+  salaryMin       Float?
+  salaryMax       Float?
+  salaryCurrency  String        @default("IDR") @db.VarChar(10)
+  benefits        String?       @db.Text
+
+  // Job Description Archiver
+  jobDescription  String?       @db.Text
+
+  // AI ATS Match Cache
+  aiMatchAnalysis String?       @db.Text
+
+  appliedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  stages          ApplicationStage[]
+  notes           ApplicationNote[]
+  reminders       Reminder[]
+  contacts        Contact[]
+  resumeId        String?
+  resume          Resume?       @relation(fields: [resumeId], references: [id])
+}
+
+model ApplicationStage {
+  id              String        @id @default(cuid())
+  applicationId   String
+  application     JobApplication @relation(fields: [applicationId], references: [id])
+
+  stage           StageType
+  enteredAt       DateTime      @default(now())
+  leftAt          DateTime?
+  note            String?       @db.Text
+}
+
+model ApplicationNote {
+  id              String        @id @default(cuid())
+  applicationId   String
+  application     JobApplication @relation(fields: [applicationId], references: [id])
+
+  type            String        @default("GENERAL") @db.VarChar(50) // GENERAL or INTERVIEW_PREP
+  title           String?       @db.VarChar(255)
+  content         String        @db.Text
+  createdAt       DateTime      @default(now())
+}
+
+model Contact {
+  id              String        @id @default(cuid())
+  applicationId   String
+  application     JobApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  name            String        @db.VarChar(191)
+  role            String?       @db.VarChar(191)
+  email           String?       @db.VarChar(191)
+  phone           String?       @db.VarChar(100)
+  linkedinUrl     String?       @db.Text
+  notes           String?       @db.Text
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+
+model Resume {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+
+  title           String
+  fileUrl         String?
+  content         String?       @db.Text // optional parsed resume text
+
+  version         Int           @default(1)
+  createdAt       DateTime      @default(now())
+
+  applications    JobApplication[]
+}
+
+model Reminder {
+  id              String        @id @default(cuid())
+  applicationId   String
+  application     JobApplication @relation(fields: [applicationId], references: [id])
+
+  type            ReminderType
+  remindAt        DateTime
+  isCompleted     Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+}
+
+model AnalyticsSnapshot {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+
+  totalApplied    Int
+  totalOffers     Int
+  totalRejected   Int
+
+  successRate     Float
+  avgResponseTime Float?
+
+  createdAt       DateTime      @default(now())
+}
